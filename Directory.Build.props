@@ -1,0 +1,8 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <!-- Ensure we use .NET SDK MSBuild -->
+    <MSBuildSDKsPath Condition="'$(MSBuildSDKsPath)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(SpecialFolder.ProgramFiles)), "dotnet", "sdk", "$(NETCoreSdkVersion)", "Sdks"))</MSBuildSDKsPath>
+  </PropertyGroup>
+</Project>
+

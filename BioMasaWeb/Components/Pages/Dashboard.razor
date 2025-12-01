@@ -1,0 +1,525 @@
+﻿@page "/"
+@using BioMasaWeb.Models
+@using BioMasaWeb.Services
+@inject IBiomassAnalysisService AnalysisService
+@rendermode InteractiveServer
+
+<PageTitle>BioMasa Analysis</PageTitle>
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1 class="dashboard-title">
+            <span class="icon">🌱</span>
+            Analiza Biomasei din Pășuni
+        </h1>
+        <p class="dashboard-subtitle">Analiză Inteligentă cu Vision AI</p>
+    </div>
+
+    @if (!isAnalyzing && analysisResult == null)
+    {
+        <div class="upload-section">
+            <div class="upload-card">
+                <div class="upload-header">
+                    <h2>📸 Încarcă Imaginea Pășunii</h2>
+                    <p>Selectează o imagine clară pentru analiză automată</p>
+                </div>
+
+                <div class="upload-area @(isDragOver ? "drag-over" : "")" 
+                     @ondrop="HandleDrop" 
+                     @ondrop:preventDefault="true"
+                     @ondragover:preventDefault="true"
+                     @ondragover="HandleDragOver"
+                     @ondragleave="HandleDragLeave">
+                    <InputFile OnChange="HandleFileSelected" accept="image/*" class="file-input" id="fileInput" />
+                    <label for="fileInput" class="upload-label">
+                        <div class="upload-icon">📁</div>
+                        <div class="upload-text">
+                            <strong>Click pentru a selecta</strong> sau trage fișierul aici
+                        </div>
+                        <div class="upload-hint">PNG, JPG, JPEG (Max 10MB)</div>
+                    </label>
+                </div>
+
+                @if (selectedFile != null)
+                {
+                    <div class="file-preview">
+                        <div class="preview-info">
+                            <span class="file-icon">📄</span>
+                            <span class="file-name">@selectedFile.Name</span>
+                            <span class="file-size">@FormatFileSize(selectedFile.Size)</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(imagePreviewUrl))
+                        {
+                            <div class="preview-image-container">
+                                <img src="@imagePreviewUrl" alt="Preview" class="preview-image" />
+                            </div>
+                        }
+                        
+                        <button type="button" class="btn-analyze" @onclick="AnalyzeImage" @onclick:preventDefault="true" disabled="@isAnalyzing">
+                            <span class="btn-icon">🔬</span>
+                            @if (isAnalyzing)
+                            {
+                                <span>Se analizează...</span>
+                            }
+                            else
+                            {
+                                <span>Analizează cu AI</span>
+                            }
+                        </button>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="error-message">
+                        <span class="error-icon">⚠️</span>
+                        @errorMessage
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (isAnalyzing)
+    {
+        <div class="analyzing-overlay">
+            <div class="analyzing-card">
+                <div class="spinner"></div>
+                <h2>Analizare în curs...</h2>
+                <p>Modelul Vision AI procesează imaginea pășunii</p>
+                <div class="progress-steps">
+                    <div class="step active">🖼️ Procesare imagine</div>
+                    <div class="step active">🔍 Extragere caracteristici</div>
+                    <div class="step active">🧠 Predicție biomasa</div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (analysisResult != null)
+    {
+        <div class="results-section">
+            <div class="results-header">
+                <h2>✅ Rezultatele Analizei</h2>
+                <button class="btn-new-analysis" @onclick="ResetAnalysis">
+                    <span>🔄</span> Analiză Nouă
+                </button>
+            </div>
+
+            <div class="results-grid">
+                <div class="result-card image-card">
+                    <h3>🖼️ Imaginea Analizată</h3>
+                    <img src="data:image/jpeg;base64,@analysisResult.ImageBase64" alt="Analyzed pasture" class="analyzed-image" />
+                    <div class="image-info">
+                        <div class="info-item">
+                            <strong>📅 Data:</strong> @analysisResult.AnalysisDate.ToString("dd MMM yyyy HH:mm")
+                        </div>
+                        <div class="info-item">
+                            <strong>📊 Titlu:</strong> @analysisResult.Title
+                        </div>
+                        <div class="info-item">
+                            <strong>📝 Descriere:</strong> @analysisResult.Description
+                        </div>
+                        <div class="info-item confidence">
+                            <strong>ℹ️ Notă:</strong> Datele sunt aproximative din cauza unui data set mic.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="result-card metrics-card">
+                    <h3>📈 Componente Biomasa</h3>
+                    <div class="metrics-grid">
+                        <div class="metric green">
+                            <div class="metric-icon">🌿</div>
+                            <div class="metric-info">
+                                <div class="metric-label">Biomasa Verde</div>
+                                <div class="metric-value">@analysisResult.Components.DryGreenG.ToString("N2") g</div>
+                            </div>
+                        </div>
+                        <div class="metric clover">
+                            <div class="metric-icon">🍀</div>
+                            <div class="metric-info">
+                                <div class="metric-label">Trifoi</div>
+                                <div class="metric-value">@analysisResult.Components.DryCloverG.ToString("N2") g</div>
+                            </div>
+                        </div>
+                        <div class="metric dead">
+                            <div class="metric-icon">🍂</div>
+                            <div class="metric-info">
+                                <div class="metric-label">Material Mort</div>
+                                <div class="metric-value">@analysisResult.Components.DryDeadG.ToString("N2") g</div>
+                            </div>
+                        </div>
+                        <div class="metric total">
+                            <div class="metric-icon">📊</div>
+                            <div class="metric-info">
+                                <div class="metric-label">Biomasa Totală</div>
+                                <div class="metric-value">@analysisResult.Components.DryTotalG.ToString("N2") g</div>
+                            </div>
+                        </div>
+                        <div class="metric gdm">
+                            <div class="metric-icon">⭐</div>
+                            <div class="metric-info">
+                                <div class="metric-label">GDM (Furaj Disponibil)</div>
+                                <div class="metric-value">@analysisResult.Components.GdmG.ToString("N2") g</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="result-card chart-card">
+                    <h3>📊 Distribuția Biomasei</h3>
+                    <div class="chart-container">
+                        <ApexChart TItem="BiomassData"
+                                   Title="Componente Biomasa (grame)"
+                                   Height="350"
+                                   Options="@barChartOptions">
+                            <ApexPointSeries TItem="BiomassData"
+                                           Items="@GetBiomassData()"
+                                           Name="Biomasa"
+                                           SeriesType="SeriesType.Bar"
+                                           XValue="@((item) => item.Component)"
+                                           YAggregate="@((items) => items.Sum(x => x.Value))" />
+                        </ApexChart>
+                    </div>
+                </div>
+
+                <div class="result-card pie-card">
+                    <h3>🥧 Compoziția Procentuală</h3>
+                    <div class="pie-container">
+                        @{
+                            var total = analysisResult.Components.DryTotalG;
+                            var greenPercent = total > 0 ? (analysisResult.Components.DryGreenG / total) * 100 : 0;
+                            var cloverPercent = total > 0 ? (analysisResult.Components.DryCloverG / total) * 100 : 0;
+                            var deadPercent = total > 0 ? (analysisResult.Components.DryDeadG / total) * 100 : 0;
+                        }
+                        <ApexChart TItem="PieData"
+                                   Title="Distribuție Procentuală"
+                                   Height="350"
+                                   Options="@pieChartOptions">
+                            <ApexPointSeries TItem="PieData"
+                                           Items="@GetPieData()"
+                                           SeriesType="SeriesType.Donut"
+                                           Name="Procent"
+                                           XValue="@((item) => item.Label)"
+                                           YAggregate="@((items) => items.Sum(x => x.Percentage))" />
+                        </ApexChart>
+                        <div class="pie-legend">
+                            <div class="legend-item">
+                                <span class="legend-color" style="background: #4ade80"></span>
+                                <span>Verde: @greenPercent.ToString("F1")%</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="legend-color" style="background: #a78bfa"></span>
+                                <span>Trifoi: @cloverPercent.ToString("F1")%</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="legend-color" style="background: #fb923c"></span>
+                                <span>Mort: @deadPercent.ToString("F1")%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="result-card recommendations-card">
+                    <h3>💡 Recomandări AI</h3>
+                    <div class="recommendations-box">
+                        <p>@analysisResult.Recommendations</p>
+                    </div>
+                    
+                    <div class="insights-list">
+                        @if (analysisResult.Components.GdmG > 1000)
+                        {
+                            <div class="insight success">
+                                <span class="insight-icon">✅</span>
+                                <div>
+                                    <strong>Furaj Excelent</strong>
+                                    <p>GDM-ul este ridicat (@analysisResult.Components.GdmG.ToString("N2")g). Pășunea poate susține turmă mare.</p>
+                                </div>
+                            </div>
+                        }
+                        else if (analysisResult.Components.GdmG > 500)
+                        {
+                            <div class="insight warning">
+                                <span class="insight-icon">⚠️</span>
+                                <div>
+                                    <strong>Furaj Moderat</strong>
+                                    <p>GDM-ul este mediu (@analysisResult.Components.GdmG.ToString("N2")g). Monitorizați consumul.</p>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="insight danger">
+                                <span class="insight-icon">❌</span>
+                                <div>
+                                    <strong>Furaj Insuficient</strong>
+                                    <p>GDM-ul este scăzut (@analysisResult.Components.GdmG.ToString("N2")g). Considerați rotația.</p>
+                                </div>
+                            </div>
+                        }
+
+                        @if (deadPercent > 30)
+                        {
+                            <div class="insight warning">
+                                <span class="insight-icon">🍂</span>
+                                <div>
+                                    <strong>Material Mort Ridicat</strong>
+                                    <p>@deadPercent.ToString("F1")% material mort. Considerați curățare sau aerare.</p>
+                                </div>
+                            </div>
+                        }
+
+                        @if (greenPercent > 60)
+                        {
+                            <div class="insight success">
+                                <span class="insight-icon">🌿</span>
+                                <div>
+                                    <strong>Vegetație Sănătoasă</strong>
+                                    <p>@greenPercent.ToString("F1")% biomasa verde. Pășune în stare excelentă!</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private IBrowserFile? selectedFile;
+    private byte[]? imageData; // Store image data to avoid reading file twice
+    private string imagePreviewUrl = string.Empty;
+    private bool isDragOver;
+    private bool isAnalyzing;
+    private BiomassAnalysisResponse? analysisResult;
+    private string errorMessage = string.Empty;
+
+    private ApexChartOptions<BiomassData> barChartOptions = new()
+    {
+        Chart = new Chart
+        {
+            Background = "transparent",
+            Toolbar = new Toolbar { Show = true }
+        },
+        Colors = new List<string> { "#4ade80", "#a78bfa", "#fb923c", "#fbbf24" },
+        Theme = new Theme
+        {
+            Mode = Mode.Dark
+        },
+        PlotOptions = new PlotOptions
+        {
+            Bar = new PlotOptionsBar
+            {
+                Distributed = true,
+                BorderRadius = 8
+            }
+        }
+    };
+
+    private ApexChartOptions<PieData> pieChartOptions = new()
+    {
+        Chart = new Chart
+        {
+            Background = "transparent"
+        },
+        Colors = new List<string> { "#4ade80", "#a78bfa", "#fb923c" },
+        Theme = new Theme
+        {
+            Mode = Mode.Dark
+        },
+        Legend = new Legend
+        {
+            Position = LegendPosition.Bottom
+        },
+        Labels = new List<string> { "Verde", "Trifoi", "Mort" }
+    };
+
+    private void HandleDragOver()
+    {
+        isDragOver = true;
+    }
+
+    private void HandleDragLeave()
+    {
+        isDragOver = false;
+    }
+
+    private void HandleDrop()
+    {
+        isDragOver = false;
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        errorMessage = string.Empty;
+        imageData = null;
+        imagePreviewUrl = string.Empty;
+        
+        if (selectedFile != null)
+        {
+            try
+            {
+                Console.WriteLine($"[HandleFileSelected] File: {selectedFile.Name}, Size: {selectedFile.Size} bytes, Type: {selectedFile.ContentType}");
+                
+                // Citim întregul fișier o singură dată într-un MemoryStream pentru a evita trunchierile
+                await using var stream = selectedFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                await using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                imageData = memoryStream.ToArray();
+                
+                Console.WriteLine($"[HandleFileSelected] Bytes read and saved: {imageData.Length}");
+                
+                // Creăm preview-ul imaginii
+                var base64String = Convert.ToBase64String(imageData);
+                imagePreviewUrl = $"data:{selectedFile.ContentType};base64,{base64String}";
+                
+                Console.WriteLine($"[HandleFileSelected] Preview URL length: {imagePreviewUrl.Length}");
+                Console.WriteLine($"[HandleFileSelected] Preview created successfully");
+                
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HandleFileSelected] ERROR: {ex.Message}");
+                errorMessage = $"Eroare la încărcarea imaginii: {ex.Message}";
+                imageData = null;
+            }
+        }
+    }
+
+    private async Task AnalyzeImage()
+    {
+        Console.WriteLine($"[AnalyzeImage] START - selectedFile: {selectedFile?.Name}");
+        Console.WriteLine($"[AnalyzeImage] isAnalyzing: {isAnalyzing}");
+        Console.WriteLine($"[AnalyzeImage] imageData is null: {imageData == null}");
+        
+        if (imageData == null || selectedFile == null) 
+        {
+            Console.WriteLine("[AnalyzeImage] ERROR: No image data available");
+            errorMessage = "Te rog selectează o imagine mai întâi.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        isAnalyzing = true;
+        errorMessage = string.Empty;
+        Console.WriteLine("[AnalyzeImage] Set isAnalyzing = true, calling StateHasChanged");
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            Console.WriteLine($"[AnalyzeImage] Using cached image data: {imageData.Length} bytes");
+            Console.WriteLine($"[AnalyzeImage] Calling AnalysisService.AnalyzeImageAsync with {imageData.Length} bytes");
+            
+            // Use cached image data instead of reading file again
+            analysisResult = await AnalysisService.AnalyzeImageAsync(imageData);
+            
+            Console.WriteLine($"[AnalyzeImage] Service returned: {(analysisResult != null ? "Success" : "Null")}");
+            
+            if (analysisResult == null)
+            {
+                errorMessage = "Serviciul a returnat un răspuns gol. Verifică conexiunea.";
+            }
+            else
+            {
+                Console.WriteLine($"[AnalyzeImage] Analysis complete: Title={analysisResult.Title}, Confidence={analysisResult.ConfidenceScore}");
+            }
+        }
+        catch (TaskCanceledException ex)
+        {
+            Console.WriteLine($"[AnalyzeImage] TaskCanceledException: {ex.Message}");
+            errorMessage = "⏱️ Timeout: Analizarea durează prea mult. Încearcă o imagine mai mică.";
+            analysisResult = null;
+        }
+        catch (TimeoutException ex)
+        {
+            Console.WriteLine($"[AnalyzeImage] TimeoutException: {ex.Message}");
+            errorMessage = "⏱️ Timeout: Serviciul AI nu răspunde. Reîncearcă.";
+            analysisResult = null;
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"[AnalyzeImage] HttpRequestException: {ex.Message}");
+            errorMessage = $"🌐 Eroare de rețea: {ex.Message}";
+            analysisResult = null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AnalyzeImage] Exception: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[AnalyzeImage] StackTrace: {ex.StackTrace}");
+            errorMessage = $"❌ Eroare: {ex.Message}";
+            analysisResult = null;
+        }
+        finally
+        {
+            isAnalyzing = false;
+            Console.WriteLine("[AnalyzeImage] FINALLY: Set isAnalyzing = false, calling StateHasChanged");
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ResetAnalysis()
+    {
+        selectedFile = null;
+        imagePreviewUrl = string.Empty;
+        analysisResult = null;
+        errorMessage = string.Empty;
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+
+    private List<BiomassData> GetBiomassData()
+    {
+        if (analysisResult == null) return new List<BiomassData>();
+        
+        return new List<BiomassData>
+        {
+            new BiomassData { Component = "Verde", Value = (decimal)analysisResult.Components.DryGreenG },
+            new BiomassData { Component = "Trifoi", Value = (decimal)analysisResult.Components.DryCloverG },
+            new BiomassData { Component = "Mort", Value = (decimal)analysisResult.Components.DryDeadG },
+            new BiomassData { Component = "GDM", Value = (decimal)analysisResult.Components.GdmG }
+        };
+    }
+
+    private List<PieData> GetPieData()
+    {
+        if (analysisResult == null) return new List<PieData>();
+        
+        var total = analysisResult.Components.DryTotalG;
+        if (total == 0) return new List<PieData>();
+        
+        return new List<PieData>
+        {
+            new PieData { Label = "Verde", Percentage = (decimal)((analysisResult.Components.DryGreenG / total) * 100), Color = "#4ade80" },
+            new PieData { Label = "Trifoi", Percentage = (decimal)((analysisResult.Components.DryCloverG / total) * 100), Color = "#a78bfa" },
+            new PieData { Label = "Mort", Percentage = (decimal)((analysisResult.Components.DryDeadG / total) * 100), Color = "#fb923c" }
+        };
+    }
+
+    public class BiomassData
+    {
+        public string Component { get; set; } = string.Empty;
+        public decimal Value { get; set; }
+    }
+
+    public class PieData
+    {
+        public string Label { get; set; } = string.Empty;
+        public decimal Percentage { get; set; }
+        public string Color { get; set; } = string.Empty;
+    }
+}
